@@ -1,61 +1,60 @@
 import '@src/Popup.css';
-import { t } from '@extension/i18n';
-import { PROJECT_URL_OBJECT, useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
+import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
-import { cn, ErrorDisplay, LoadingSpinner, ToggleButton } from '@extension/ui';
+import { cn, LoadingSpinner, ErrorDisplay } from '@extension/ui';
+import { useState } from 'react';
 
-const notificationOptions = {
-  type: 'basic',
-  iconUrl: chrome.runtime.getURL('icon-34.png'),
-  title: 'Injecting content script error',
-  message: 'You cannot inject script here!',
-} as const;
+const BACKEND_URL = "https://productivity-companion-backend.onrender.com";
 
 const Popup = () => {
   const { isLight } = useStorage(exampleThemeStorage);
-  const logo = isLight ? 'popup/logo_vertical.svg' : 'popup/logo_vertical_dark.svg';
+  const [loading, setLoading] = useState(false);
+  const [response, setResponse] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const goGithubSite = () => chrome.tabs.create(PROJECT_URL_OBJECT);
-
-  const injectContentScript = async () => {
-    const [tab] = await chrome.tabs.query({ currentWindow: true, active: true });
-
-    if (tab.url!.startsWith('about:') || tab.url!.startsWith('chrome:')) {
-      chrome.notifications.create('inject-error', notificationOptions);
+  const testBackend = async () => {
+    setLoading(true);
+    setError(null);
+    setResponse(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/test-gemini`);
+      const data = await res.json();
+      setResponse(data.response);
+    } catch (err) {
+      setError('Failed to connect to backend');
+    } finally {
+      setLoading(false);
     }
-
-    await chrome.scripting
-      .executeScript({
-        target: { tabId: tab.id! },
-        files: ['/content-runtime/example.iife.js', '/content-runtime/all.iife.js'],
-      })
-      .catch(err => {
-        // Handling errors related to other paths
-        if (err.message.includes('Cannot access a chrome:// URL')) {
-          chrome.notifications.create('inject-error', notificationOptions);
-        }
-      });
   };
 
   return (
-    <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')}>
-      <header className={cn('App-header', isLight ? 'text-gray-900' : 'text-gray-100')}>
-        <button onClick={goGithubSite}>
-          <img src={chrome.runtime.getURL(logo)} className="App-logo" alt="logo" />
-        </button>
-        <p>
-          Edit <code>pages/popup/src/Popup.tsx</code>
-        </p>
-        <button
-          className={cn(
-            'mt-4 rounded px-4 py-1 font-bold shadow hover:scale-105',
-            isLight ? 'bg-blue-200 text-black' : 'bg-gray-700 text-white',
-          )}
-          onClick={injectContentScript}>
-          {t('injectButton')}
-        </button>
-        <ToggleButton>{t('toggleTheme')}</ToggleButton>
-      </header>
+    <div className={cn('App', isLight ? 'bg-slate-50' : 'bg-gray-800')} style={{ minWidth: '320px', padding: '16px' }}>
+      <h1 className={cn('text-lg font-bold mb-4', isLight ? 'text-gray-900' : 'text-gray-100')}>
+        Productivity Companion
+      </h1>
+
+      <button
+        onClick={testBackend}
+        disabled={loading}
+        className={cn(
+          'w-full rounded px-4 py-2 font-bold shadow hover:scale-105 transition-transform',
+          isLight ? 'bg-blue-500 text-white' : 'bg-blue-600 text-white',
+        )}>
+        {loading ? 'Thinking...' : 'Test AI Connection'}
+      </button>
+
+      {response && (
+        <div className={cn('mt-4 rounded p-3 text-sm', isLight ? 'bg-green-50 text-green-800' : 'bg-green-900 text-green-100')}>
+          <p className="font-bold mb-1">Gemini says:</p>
+          <p>{response}</p>
+        </div>
+      )}
+
+      {error && (
+        <div className={cn('mt-4 rounded p-3 text-sm', isLight ? 'bg-red-50 text-red-800' : 'bg-red-900 text-red-100')}>
+          {error}
+        </div>
+      )}
     </div>
   );
 };
