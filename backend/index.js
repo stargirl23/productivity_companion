@@ -20,6 +20,12 @@ async function callGemini(prompt) {
     }
   )
   const data = await response.json()
+  console.log('Gemini raw response:', JSON.stringify(data))
+  
+  if (!data.candidates) {
+    throw new Error(JSON.stringify(data))
+  }
+  
   return data.candidates[0].content.parts[0].text
 }
 
