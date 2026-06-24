@@ -34,25 +34,54 @@ app.get('/', (req, res) => {
 })
 
 app.post('/parse-task', async (req, res) => {
-  const { task, deadline } = req.body
+  const { task, targetDate } = req.body
 
-  if (!task || !deadline) {
-    return res.status(400).json({ error: 'Task and deadline are required' })
+  if (!task || !targetDate) {
+    return res.status(400).json({ error: 'Task and targetDate are required' })
   }
 
-  const prompt = `You are a productivity strategist helping someone beat procrastination and hit their deadline.
+  const today = new Date().toISOString()
+  const daysUntilDeadline = Math.ceil((new Date(targetDate) - new Date()) / (1000 * 60 * 60 * 24))
 
-Task: ${task}
-Deadline: ${deadline}
+  const prompt = `You are a productivity strategist. Your job is to create a specific, actionable plan — not a generic schedule.
 
-Respond ONLY in this exact JSON format, no extra text:
+Task: "${task}"
+Target Date: "${targetDate}"
+Today: "${today}"
+Days available: ${daysUntilDeadline}
+
+First, silently classify this task as one of:
+- "project": Has multiple distinct phases (research, build, review)
+- "learning": Requires building a skill over time
+- "application": A submission with specific components (resume, cover letter, etc.)
+- "other": Anything else
+
+Then generate a plan that fits the task type. Rules:
+- For "project": Break into phases, not days. Each phase has a clear output.
+- For "learning": Define what "done" looks like first. Then suggest a practice pattern, not a rigid schedule.
+- For "application": List the exact components needed and the order to tackle them.
+- For "other": Use your best judgment.
+
+NEVER output generic advice like "stay focused" or "take breaks."
+EVERY micro_task must be specific to THIS task, not reusable for any other task.
+
+Respond ONLY in this exact JSON format, no extra text, no markdown:
 {
-  "risk": "The single biggest reason this deadline might be missed (1 sentence)",
-  "daily_plan": [
-    { "day": "Day 1", "focus": "...", "micro_tasks": ["15-min task", "15-min task"] }
+  "task_type": "project | learning | application | other",
+  "finish_line": "One sentence: what does 100% done look like for this specific task?",
+  "biggest_risk": "The single most likely reason THIS specific task won't get done",
+  "first_action": "The most specific next action (not 'start working', but exactly what to open, write, or do)",
+  "phases": [
+    {
+      "name": "Phase name",
+      "goal": "The concrete output of this phase",
+      "steps": ["Specific step 1", "Specific step 2"]
+    }
   ],
-  "first_action": "The one specific thing they can do in the next 10 minutes RIGHT NOW",
-  "energy_tip": "Best time of day to work on this and why (1 sentence)"
+  "schedule_suggestion": {
+    "first_step_deadline": "ISO date by when the first phase should be done",
+    "suggested_daily_minutes": 60
+  }
 }`
 
   try {
@@ -60,9 +89,17 @@ Respond ONLY in this exact JSON format, no extra text:
     const clean = raw.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(clean)
 
-    const battlePlan = `⚠️ BIGGEST RISK\n${parsed.risk}\n\n⚡ DO THIS NOW (10 min)\n${parsed.first_action}\n\n📅 YOUR PLAN\n${parsed.daily_plan.map(d => `${d.day}: ${d.focus}\n${d.micro_tasks.map(t => `  • ${t}`).join('\n')}`).join('\n\n')}\n\n💡 ENERGY TIP\n${parsed.energy_tip}`
+    const battlePlan = `🏁 DONE LOOKS LIKE\n${parsed.finish_line}\n\n⚠️ BIGGEST RISK\n${parsed.biggest_risk}\n\n⚡ DO THIS FIRST\n${parsed.first_action}\n\n📋 YOUR PLAN\n${parsed.phases.map((p, i) => `${i + 1}. ${p.name}\n   Goal: ${p.goal}\n${p.steps.map(s => `   • ${s}`).join('\n')}`).join('\n\n')}`
 
-    res.json({ battlePlan })
+    res.json({
+      battlePlan,
+      raw: parsed,
+      scheduleFirstStep: {
+        task: parsed.phases[0]?.steps[0] ?? task,
+        targetDate: parsed.schedule_suggestion.first_step_deadline,
+        suggested_daily_minutes: parsed.schedule_suggestion.suggested_daily_minutes
+      }
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
