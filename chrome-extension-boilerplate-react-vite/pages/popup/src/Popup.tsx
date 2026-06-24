@@ -202,6 +202,17 @@ const Popup = () => {
               : new Date(targetDate).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
           </p>
           <PriorityBadge />
+          <select
+  value={classification.priority_score}
+  onChange={e => setClassification({ ...classification, priority_score: Number(e.target.value) })}
+  className={cn('mt-3 w-full rounded px-2 py-1 text-xs outline-none', inputCn)}
+>
+  <option value={1}>1 — Critical</option>
+  <option value={2}>2 — High</option>
+  <option value={3}>3 — Medium</option>
+  <option value={4}>4 — Low</option>
+  <option value={5}>5 — Backburner</option>
+</select>
           <button className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
             Confirm & Add to Calendar
           </button>
@@ -219,6 +230,17 @@ const Popup = () => {
             {classification.duration_minutes ? ` · ~${classification.duration_minutes} min` : ''}
           </p>
           <PriorityBadge />
+          <select
+  value={classification.priority_score}
+  onChange={e => setClassification({ ...classification, priority_score: Number(e.target.value) })}
+  className={cn('mt-3 w-full rounded px-2 py-1 text-xs outline-none', inputCn)}
+>
+  <option value={1}>1 — Critical</option>
+  <option value={2}>2 — High</option>
+  <option value={3}>3 — Medium</option>
+  <option value={4}>4 — Low</option>
+  <option value={5}>5 — Backburner</option>
+</select>
           <button className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
             Find Free Slots →
           </button>
@@ -226,27 +248,66 @@ const Popup = () => {
         </div>
       )}
 
-      {/* BUCKET 3: CONTINUOUS EFFORT */}
-      {view === 'continuous' && classification && (
-        <div className={cn('rounded-xl p-3', card)}>
-          <p className={cn('text-xs font-semibold mb-1', subtext)}>🔄 Ongoing effort</p>
-          <p className={cn('text-sm font-bold', text)}>{task}</p>
-          <p className={cn('text-xs mt-1', subtext)}>
-            Target: {new Date(targetDate).toLocaleDateString([], { dateStyle: 'medium' })}
-          </p>
-          <div className={cn('mt-3 rounded-lg p-2 text-xs', isLight ? 'bg-slate-100' : 'bg-gray-700')}>
-            <p className={cn('font-medium mb-1', text)}>AI suggests:</p>
-            <p className={subtext}>
-              {classification.daily_minutes} min/day · {classification.frequency_per_week}x per week
-            </p>
-          </div>
-          <PriorityBadge />
-          <button className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
-            Find Recurring Slots →
-          </button>
-          <BackButton />
-        </div>
-      )}
+     {/* BUCKET 3: CONTINUOUS EFFORT */}
+{view === 'continuous' && classification && (
+  <div className={cn('rounded-xl p-3', card)}>
+    <p className={cn('text-xs font-semibold mb-1', subtext)}>🔄 Ongoing effort</p>
+    <p className={cn('text-sm font-bold', text)}>{task}</p>
+    <p className={cn('text-xs mt-1', subtext)}>
+      Target: {new Date(targetDate).toLocaleDateString([], { dateStyle: 'medium' })}
+    </p>
+
+    <div className={cn('mt-3 rounded-lg p-2 text-xs space-y-2', isLight ? 'bg-slate-100' : 'bg-gray-700')}>
+      <p className={cn('font-medium', text)}>Adjust AI suggestion:</p>
+
+      <div className="flex items-center justify-between gap-2">
+        <label className={cn(subtext)}>Min/day</label>
+        <input
+          type="number"
+          min={5}
+          max={480}
+          value={classification.daily_minutes ?? 30}
+          onChange={e => setClassification({ ...classification, daily_minutes: Number(e.target.value) })}
+          className={cn('w-20 rounded px-2 py-1 text-xs text-center outline-none', inputCn)}
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <label className={cn(subtext)}>Days/week</label>
+        <input
+          type="number"
+          min={1}
+          max={7}
+          value={classification.frequency_per_week ?? 3}
+          onChange={e => setClassification({ ...classification, frequency_per_week: Number(e.target.value) })}
+          className={cn('w-20 rounded px-2 py-1 text-xs text-center outline-none', inputCn)}
+        />
+      </div>
+
+      <div className="flex items-center justify-between gap-2">
+        <label className={cn(subtext)}>Priority</label>
+        <select
+          value={classification.priority_score}
+          onChange={e => setClassification({ ...classification, priority_score: Number(e.target.value) })}
+          className={cn('w-28 rounded px-2 py-1 text-xs outline-none', inputCn)}
+        >
+          <option value={1}>1 — Critical</option>
+          <option value={2}>2 — High</option>
+          <option value={3}>3 — Medium</option>
+          <option value={4}>4 — Low</option>
+          <option value={5}>5 — Backburner</option>
+        </select>
+      </div>
+    </div>
+
+    <p className={cn('text-xs mt-2 italic', subtext)}>{classification.priority_reason}</p>
+
+    <button className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
+      Find Recurring Slots →
+    </button>
+    <BackButton />
+  </div>
+)}
 
       {/* BATTLE PLAN VIEW */}
       {view === 'battle-plan' && battlePlan && (
