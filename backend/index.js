@@ -67,7 +67,58 @@ Respond ONLY in this exact JSON format, no extra text:
     res.status(500).json({ error: err.message })
   }
 })
+app.post('/classify-intent', async (req, res) => {
+  const { task, targetDate } = req.body
 
+  if (!task || !targetDate) {
+    return res.status(400).json({ error: 'Task and targetDate are required' })
+  }
+
+  const today = new Date().toISOString()
+
+  const prompt = `You are a task classification engine. Analyze the task and respond ONLY in JSON.
+
+Task: "${task}"
+Target Date: "${targetDate}"
+Today: "${today}"
+
+Classify into exactly one execution_type:
+- "explicit": Has a specific time embedded (meeting, interview, appointment, class)
+- "one-off": Single finite action before target date (pay bill, submit form, send email)
+- "continuous": Requires repeated effort over time (learn X, build X, practice X, prepare for X)
+
+Also infer:
+- priority_score (1-5):
+  1 = Critical (interview, exam, legal deadline, payment)
+  2 = High (important application, project milestone)
+  3 = Medium (standard task)
+  4 = Low (plenty of time, low stakes)
+  5 = Backburner (someday/maybe)
+
+- For "explicit": extract event_time (ISO string)
+- For "one-off": estimate duration_minutes needed
+- For "continuous": suggest daily_minutes and frequency_per_week
+
+Respond ONLY in this exact JSON format, no extra text, no markdown:
+{
+  "execution_type": "explicit | one-off | continuous",
+  "priority_score": 1,
+  "priority_reason": "one sentence why",
+  "event_time": null,
+  "duration_minutes": null,
+  "daily_minutes": null,
+  "frequency_per_week": null
+}`
+
+  try {
+    const raw = await callGemini(prompt)
+    const clean = raw.replace(/```json|```/g, '').trim()
+    const parsed = JSON.parse(clean)
+    res.json(parsed)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 app.post('/get-advice', (req, res) => {
   res.json({ message: 'get-advice stub' })
 })
