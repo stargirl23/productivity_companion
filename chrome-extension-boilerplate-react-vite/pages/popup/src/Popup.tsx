@@ -2,12 +2,12 @@ import '@src/Popup.css';
 import { useStorage, withErrorBoundary, withSuspense } from '@extension/shared';
 import { exampleThemeStorage } from '@extension/storage';
 import { cn, LoadingSpinner, ErrorDisplay } from '@extension/ui';
-import { useState } from 'react';
+import { useState,useEffect } from 'react';
+import { signInWithGoogle, getGoogleToken } from '@src/lib/auth';
 
 const BACKEND_URL = "https://productivity-companion-backend.onrender.com";
 
 type View = 'intake' | 'loading' | 'explicit' | 'one-off' | 'continuous' | 'battle-plan';
-
 interface Classification {
   execution_type: 'explicit' | 'one-off' | 'continuous';
   priority_score: number;
@@ -27,6 +27,8 @@ const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
 };
 
 const Popup = () => {
+  const [userToken, setUserToken] = useState<string | null>(null)
+const [authLoading, setAuthLoading] = useState(true)
   const { isLight } = useStorage(exampleThemeStorage);
   const [view, setView] = useState<View>('intake');
   const [task, setTask] = useState('');
@@ -44,6 +46,13 @@ const Popup = () => {
     ? 'bg-white border border-gray-300 text-gray-900 placeholder-gray-400 focus:border-blue-500'
     : 'bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-400';
 
+// Check auth on mount
+ useEffect(() => {
+  getGoogleToken().then(token => {
+    setUserToken(token)
+    setAuthLoading(false)
+  })
+}, [])
   const reset = () => {
     setTask('');
     setTargetDate('');
@@ -53,45 +62,49 @@ const Popup = () => {
     setView('intake');
   };
 
-  // --- Schedule It flow ---
-  const handleSchedule = async () => {
-    if (!task.trim() || !targetDate) return;
-    setView('loading');
-    setError(null);
-    try {
-      const res = await fetch(`${BACKEND_URL}/classify-intent`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task, targetDate }),
-      });
-      const data: Classification = await res.json();
-      setClassification(data);
-      setView(data.execution_type);
-    } catch {
-      setError('Failed to connect. Try again.');
-      setView('intake');
-    }
-  };
+const handleSchedule = async () => {
+  if (!task.trim() || !targetDate) return;
+  setView('loading');
+  setError(null);
+  try {
+    const res = await fetch(`${BACKEND_URL}/classify-intent`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userToken}`
+      },
+      body: JSON.stringify({ task, targetDate }),
+    });
+    const data: Classification = await res.json();
+    setClassification(data);
+    setView(data.execution_type);
+  } catch {
+    setError('Failed to connect. Try again.');
+    setView('intake');
+  }
+};
 
-  // --- Build Plan flow ---
-  const handleBuildPlan = async () => {
-    if (!task.trim() || !targetDate) return;
-    setView('loading');
-    setError(null);
-    try {
-      const res = await fetch(`${BACKEND_URL}/parse-task`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task, deadline: targetDate }),
-      });
-      const data = await res.json();
-      setBattlePlan(data.battlePlan);
-      setView('battle-plan');
-    } catch {
-      setError('Failed to connect. Try again.');
-      setView('intake');
-    }
-  };
+const handleBuildPlan = async () => {
+  if (!task.trim() || !targetDate) return;
+  setView('loading');
+  setError(null);
+  try {
+    const res = await fetch(`${BACKEND_URL}/parse-task`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userToken}`
+      },
+      body: JSON.stringify({ task, targetDate }),
+    });
+    const data = await res.json();
+    setBattlePlan(data.battlePlan);
+    setView('battle-plan');
+  } catch(err) {
+    setError('Failed to connect. Try again.');
+    setView('intake');
+  }
+};
 
   const priorityInfo = classification ? PRIORITY_LABELS[classification.priority_score] : null;
 
@@ -128,7 +141,41 @@ const Popup = () => {
         </div>
       </div>
 
-      {/* INTAKE VIEW */}
+      {/* AUTH GATE */}
+      {authLoading && (
+        <div className="flex justify-center py-8">
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {!authLoading && !userToken && (
+        <div className={cn('rounded-xl p-4 text-center', card)}>
+          <p className={cn('text-sm font-medium mb-3', text)}>Sign in to get started</p>
+          <button
+            onClick={async () => {
+              setAuthLoading(true)
+              try {
+                const token = await signInWithGoogle()
+                setUserToken(token)
+              } catch (err) {
+                console.error('Sign in error:', err)
+                setError(`Sign in failed: ${err}`)
+              } finally {
+                setAuthLoading(false)
+              }
+            }}
+            className="w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
+            Sign in with Google
+          </button>
+          {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+        </div>
+      )}
+
+      {/* ALL VIEWS — only shown when authenticated */}
+      {!authLoading && userToken && (
+        <>
+
+          {/* INTAKE VIEW */}
       {view === 'intake' && (
         <div className={cn('rounded-xl p-3', card)}>
           <label className={cn('block text-xs font-medium mb-1', subtext)}>What do you need to do?</label>
@@ -182,7 +229,7 @@ const Popup = () => {
           </div>
         </div>
       )}
-
+      
       {/* LOADING VIEW */}
       {view === 'loading' && (
         <div className="flex flex-col items-center justify-center py-8 gap-3">
@@ -320,6 +367,8 @@ const Popup = () => {
           </button>
           <BackButton />
         </div>
+      )}
+    </>
       )}
 
     </div>

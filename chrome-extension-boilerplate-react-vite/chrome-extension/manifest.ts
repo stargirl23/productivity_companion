@@ -31,7 +31,7 @@ const manifest = {
   version: packageJson.version,
   description: '__MSG_extensionDescription__',
   host_permissions: ['<all_urls>'],
-  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel'],
+  permissions: ['storage', 'scripting', 'tabs', 'notifications', 'sidePanel','identity'],
   options_page: 'options/index.html',
   background: {
     service_worker: 'background.js',
@@ -79,6 +79,15 @@ const manifest = {
   side_panel: {
     default_path: 'side-panel/index.html',
   },
+  oauth2: {
+  client_id: process.env.CEB_GOOGLE_CLIENT_ID as string,
+  scopes: [
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/calendar',
+  ],
+},
 } satisfies ManifestType;
+
 
 export default manifest;

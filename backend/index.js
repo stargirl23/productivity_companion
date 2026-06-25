@@ -1,7 +1,12 @@
 require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
+const { createClient } = require('@supabase/supabase-js')
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_KEY
+)
 const app = express()
 app.use(cors())
 app.use(express.json())
@@ -28,7 +33,26 @@ async function callGemini(prompt) {
   
   return data.candidates[0].content.parts[0].text
 }
+const { OAuth2Client } = require('google-auth-library')
+const client = new OAuth2Client()
 
+async function getUserFromToken(req) {
+  const authHeader = req.headers.authorization
+  if (!authHeader?.startsWith('Bearer ')) return null
+  
+  const token = authHeader.split(' ')[1]
+  
+  try {
+    const response = await fetch(
+      `https://www.googleapis.com/oauth2/v3/userinfo`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    const userInfo = await response.json()
+    return userInfo // contains sub (Google user ID), email, name
+  } catch {
+    return null
+  }
+}
 app.get('/', (req, res) => {
   res.json({ status: 'ok' })
 })
@@ -151,6 +175,26 @@ Respond ONLY in this exact JSON format, no extra text, no markdown:
     const raw = await callGemini(prompt)
     const clean = raw.replace(/```json|```/g, '').trim()
     const parsed = JSON.parse(clean)
+
+    // Get user from token
+    const userInfo = await getUserFromToken(req)
+
+    // Save to Supabase if user is authenticated
+    if (userInfo?.sub) {
+      const { error: dbError } = await supabase
+        .from('tasks')
+        .insert({
+          user_id: userInfo.sub,
+          title: task,
+          target_date: targetDate,
+          execution_type: parsed.execution_type,
+          priority_score: parsed.priority_score,
+          status: 'pending'
+        })
+
+      if (dbError) console.error('Supabase insert error:', dbError)
+    }
+
     res.json(parsed)
   } catch (err) {
     res.status(500).json({ error: err.message })
