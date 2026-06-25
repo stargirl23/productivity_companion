@@ -182,15 +182,16 @@ Respond ONLY in this exact JSON format, no extra text, no markdown:
     // Save to Supabase if user is authenticated
     if (userInfo?.sub) {
       const { error: dbError } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: userInfo.sub,
-          title: task,
-          target_date: targetDate,
-          execution_type: parsed.execution_type,
-          priority_score: parsed.priority_score,
-          status: 'pending'
-        })
+  .from('tasks')
+  .insert({
+    google_id: userInfo.sub,
+    user_email: userInfo.email,
+    title: task,
+    target_date: targetDate,
+    execution_type: parsed.execution_type,
+    priority_score: parsed.priority_score,
+    status: 'pending'
+  })
 
       if (dbError) console.error('Supabase insert error:', dbError)
     }
