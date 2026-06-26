@@ -211,22 +211,27 @@ Respond ONLY in this exact JSON format, no extra text, no markdown:
     const userInfo = await getUserFromToken(req)
 
     // Save to Supabase if user is authenticated
-    if (userInfo?.sub) {
-      const { error: dbError } = await supabase
-  .from('tasks')
-  .insert({
-    google_id: userInfo.sub,
-    user_email: userInfo.email,
-    title: task,
-    target_date: targetDate,
-    execution_type: parsed.execution_type,
-    priority_score: parsed.priority_score,
-    status: 'pending'
-  })
+   if (userInfo?.sub) {
+  const { data: insertedTask, error: dbError } = await supabase
+    .from('tasks')
+    .insert({
+      google_id: userInfo.sub,
+      user_email: userInfo.email,
+      title: task,
+      target_date: targetDate,
+      execution_type: parsed.execution_type,
+      priority_score: parsed.priority_score,
+      status: 'pending'
+    })
+    .select('id')
+    .single()
 
-      if (dbError) console.error('Supabase insert error:', dbError)
-    }
-
+  if (dbError) {
+    console.error('Supabase insert error:', dbError)
+  } else {
+    parsed.task_id = insertedTask.id
+  }
+}
     res.json(parsed)
   } catch (err) {
     res.status(500).json({ error: err.message })
