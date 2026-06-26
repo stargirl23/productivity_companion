@@ -8,6 +8,7 @@ import { signInWithGoogle, getGoogleToken } from '@src/lib/auth';
 const BACKEND_URL = "https://productivity-companion-backend.onrender.com";
 
 type View = 'intake' | 'loading' | 'explicit' | 'one-off' | 'continuous' | 'battle-plan'| 'onboarding' | 'slots' | 'confirmed';
+type AvailabilityWindow = { start: string; end: string; label: string }
 interface Classification {
   execution_type: 'explicit' | 'one-off' | 'continuous';
   priority_score: number;
@@ -16,6 +17,7 @@ interface Classification {
   duration_minutes: number | null;
   daily_minutes: number | null;
   frequency_per_week: number | null;
+    task_id?: string;
 }
 
 const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
@@ -25,15 +27,12 @@ const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
   4: { label: 'Low', color: 'text-green-500' },
   5: { label: 'Backburner', color: 'text-gray-400' },
 };
-type AvailabilityWindow = { start: string; end: string; label: string }
-
-const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([
-  { start: '06:00', end: '12:00', label: '' }
-])
 const Popup = () => {
   const [userToken, setUserToken] = useState<string | null>(null);
 const [authLoading, setAuthLoading] = useState(true);
-
+const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([
+  { start: '06:00', end: '12:00', label: '' }
+])
 const [distractionSites, setDistractionSites] = useState<string[]>(['youtube.com', 'netflix.com', 'instagram.com'])
 const [newSite, setNewSite] = useState('')
 const [slots, setSlots] = useState<{ start: string; end: string; reason: string }[]>([])
@@ -102,6 +101,7 @@ const handleSchedule = async () => {
     });
     const data: Classification = await res.json();
     setClassification(data);
+    if (data.task_id) setTaskId(data.task_id)
     setView(data.execution_type);
   } catch {
     setError('Failed to connect. Try again.');
