@@ -222,7 +222,7 @@ Respond ONLY in this exact JSON format, no extra text, no markdown:
       execution_type: parsed.execution_type,
       priority_score: parsed.priority_score,
       status: 'pending',
-      work_url: workUrl || null
+      work_url: req.body.workUrl || null
     })
     .select('id')
     .single()
