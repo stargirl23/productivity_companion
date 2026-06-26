@@ -7,7 +7,7 @@ import { signInWithGoogle, getGoogleToken } from '@src/lib/auth';
 
 const BACKEND_URL = "https://productivity-companion-backend.onrender.com";
 
-type View = 'intake' | 'loading' | 'explicit' | 'one-off' | 'continuous' | 'battle-plan';
+type View = 'intake' | 'loading' | 'explicit' | 'one-off' | 'continuous' | 'battle-plan'| 'onboarding' | 'slots' | 'confirmed';
 interface Classification {
   execution_type: 'explicit' | 'one-off' | 'continuous';
   priority_score: number;
@@ -25,10 +25,21 @@ const PRIORITY_LABELS: Record<number, { label: string; color: string }> = {
   4: { label: 'Low', color: 'text-green-500' },
   5: { label: 'Backburner', color: 'text-gray-400' },
 };
+type AvailabilityWindow = { start: string; end: string; label: string }
 
+const [availabilityWindows, setAvailabilityWindows] = useState<AvailabilityWindow[]>([
+  { start: '06:00', end: '12:00', label: '' }
+])
 const Popup = () => {
-  const [userToken, setUserToken] = useState<string | null>(null)
-const [authLoading, setAuthLoading] = useState(true)
+  const [userToken, setUserToken] = useState<string | null>(null);
+const [authLoading, setAuthLoading] = useState(true);
+
+const [distractionSites, setDistractionSites] = useState<string[]>(['youtube.com', 'netflix.com', 'instagram.com'])
+const [newSite, setNewSite] = useState('')
+const [slots, setSlots] = useState<{ start: string; end: string; reason: string }[]>([])
+const [selectedSlot, setSelectedSlot] = useState<{ start: string; end: string; reason: string } | null>(null)
+const [workUrl, setWorkUrl] = useState('')
+const [taskId, setTaskId] = useState<string | null>(null)
   const { isLight } = useStorage(exampleThemeStorage);
   const [view, setView] = useState<View>('intake');
   const [task, setTask] = useState('');
@@ -47,9 +58,23 @@ const [authLoading, setAuthLoading] = useState(true)
     : 'bg-gray-700 border border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-400';
 
 // Check auth on mount
- useEffect(() => {
-  getGoogleToken().then(token => {
+useEffect(() => {
+  getGoogleToken().then(async token => {
     setUserToken(token)
+    if (token) {
+      // Check if user has completed onboarding
+      try {
+        const res = await fetch(`${BACKEND_URL}/preferences`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        const data = await res.json()
+        if (!data.exists) {
+          setView('onboarding')
+        }
+      } catch {
+        // If check fails, go to intake anyway
+      }
+    }
     setAuthLoading(false)
   })
 }, [])
@@ -174,6 +199,120 @@ const handleBuildPlan = async () => {
       {/* ALL VIEWS — only shown when authenticated */}
       {!authLoading && userToken && (
         <>
+        {/* ONBOARDING VIEW */}
+{view === 'onboarding' && (
+  <div className={cn('rounded-xl p-3 space-y-4', card)}>
+    <div>
+      <p className={cn('text-sm font-bold', text)}>Welcome! Let's set you up 👋</p>
+      <p className={cn('text-xs mt-1', subtext)}>This takes 30 seconds.</p>
+    </div>
+
+    {/* Availability Windows */}
+    <div>
+      <p className={cn('text-xs font-semibold mb-2', text)}>When are you available to work?</p>
+      {availabilityWindows.map((window: { start: string; end: string; label: string }, i: number) => (
+        <div key={i} className="flex items-center gap-2 mb-2">
+          <input
+            type="time"
+            value={window.start}
+            onChange={e => {
+              const updated = [...availabilityWindows]
+              updated[i].start = e.target.value
+              setAvailabilityWindows(updated)
+            }}
+            className={cn('flex-1 rounded px-2 py-1 text-xs outline-none', inputCn)}
+          />
+          <span className={cn('text-xs', subtext)}>→</span>
+          <input
+            type="time"
+            value={window.end}
+            onChange={e => {
+              const updated = [...availabilityWindows]
+              updated[i].end = e.target.value
+              setAvailabilityWindows(updated)
+            }}
+            className={cn('flex-1 rounded px-2 py-1 text-xs outline-none', inputCn)}
+          />
+          {availabilityWindows.length > 1 && (
+            <button
+              onClick={() => setAvailabilityWindows(availabilityWindows.filter((_: { start: string; end: string; label: string }, j: number) => j !== i))}
+              className="text-red-400 text-xs font-bold">×</button>
+          )}
+        </div>
+      ))}
+      <button
+        onClick={() => setAvailabilityWindows([...availabilityWindows, { start: '15:00', end: '18:00', label: '' }])}
+        className={cn('text-xs font-medium', isLight ? 'text-blue-500' : 'text-blue-400')}>
+        + Add time window
+      </button>
+    </div>
+
+    {/* Distraction Sites */}
+    <div>
+      <p className={cn('text-xs font-semibold mb-2', text)}>Your distraction sites</p>
+      <div className="flex flex-wrap gap-1 mb-2">
+        {distractionSites.map((site, i) => (
+          <span key={i} className={cn('flex items-center gap-1 text-xs px-2 py-1 rounded-full', isLight ? 'bg-slate-100 text-gray-700' : 'bg-gray-700 text-gray-300')}>
+            {site}
+            <button
+              onClick={() => setDistractionSites(distractionSites.filter((_, j) => j !== i))}
+              className="text-red-400 font-bold ml-1">×</button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="e.g. reddit.com"
+          value={newSite}
+          onChange={e => setNewSite(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && newSite.trim()) {
+              setDistractionSites([...distractionSites, newSite.trim()])
+              setNewSite('')
+            }
+          }}
+          className={cn('flex-1 rounded px-2 py-1 text-xs outline-none', inputCn)}
+        />
+        <button
+          onClick={() => {
+            if (newSite.trim()) {
+              setDistractionSites([...distractionSites, newSite.trim()])
+              setNewSite('')
+            }
+          }}
+          className="text-xs px-2 py-1 bg-blue-500 text-white rounded">
+          Add
+        </button>
+      </div>
+    </div>
+
+    <button
+      onClick={async () => {
+        try {
+          await fetch(`${BACKEND_URL}/preferences`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userToken}`
+            },
+            body: JSON.stringify({
+              availability_windows: availabilityWindows,
+              distraction_sites: distractionSites
+            })
+          })
+          // Save distraction sites to chrome.storage.local for content script
+          chrome.storage.local.set({ distraction_sites: distractionSites })
+          setView('intake')
+        } catch {
+          setError('Failed to save preferences.')
+        }
+      }}
+      className="w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
+      Save & Get Started →
+    </button>
+  </div>
+)}
 
           {/* INTAKE VIEW */}
       {view === 'intake' && (

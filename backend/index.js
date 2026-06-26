@@ -56,7 +56,38 @@ async function getUserFromToken(req) {
 app.get('/', (req, res) => {
   res.json({ status: 'ok' })
 })
+app.get('/preferences', async (req, res) => {
+  const userInfo = await getUserFromToken(req)
+  if (!userInfo?.sub) return res.status(401).json({ error: 'Unauthorized' })
 
+  const { data, error } = await supabase
+    .from('user_preferences')
+    .select('*')
+    .eq('google_id', userInfo.sub)
+    .single()
+
+  if (error || !data) return res.json({ exists: false })
+  res.json({ exists: true, ...data })
+})
+
+app.post('/preferences', async (req, res) => {
+  const { availability_windows, distraction_sites } = req.body
+  const userInfo = await getUserFromToken(req)
+  if (!userInfo?.sub) return res.status(401).json({ error: 'Unauthorized' })
+
+  const { error } = await supabase
+    .from('user_preferences')
+    .upsert({
+      google_id: userInfo.sub,
+      user_email: userInfo.email,
+      availability_windows,
+      distraction_sites,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'google_id' })
+
+  if (error) return res.status(500).json({ error: error.message })
+  res.json({ success: true })
+})
 app.post('/parse-task', async (req, res) => {
   const { task, targetDate } = req.body
 
