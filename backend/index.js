@@ -221,7 +221,8 @@ Respond ONLY in this exact JSON format, no extra text, no markdown:
       target_date: targetDate,
       execution_type: parsed.execution_type,
       priority_score: parsed.priority_score,
-      status: 'pending'
+      status: 'pending',
+      work_url: workUrl || null
     })
     .select('id')
     .single()
@@ -233,6 +234,113 @@ Respond ONLY in this exact JSON format, no extra text, no markdown:
   }
 }
     res.json(parsed)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+const { google } = require('googleapis')
+
+async function createCalendarEvent(accessToken, eventDetails) {
+  const auth = new google.auth.OAuth2()
+  auth.setCredentials({ access_token: accessToken })
+  
+  const calendar = google.calendar({ version: 'v3', auth })
+  
+  const event = {
+    summary: eventDetails.title,
+    description: eventDetails.description || '',
+    start: {
+      dateTime: eventDetails.start,
+      timeZone: 'Asia/Kolkata',
+    },
+    end: {
+      dateTime: eventDetails.end,
+      timeZone: 'Asia/Kolkata',
+    },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'popup', minutes: 30 },
+        { method: 'email', minutes: 60 },
+      ],
+    },
+  }
+  
+  const response = await calendar.events.insert({
+    calendarId: 'primary',
+    resource: event,
+  })
+  
+  return response.data
+}
+
+app.post('/confirm-task', async (req, res) => {
+  const {
+    task_id,
+    event_time,
+    end_time,
+    daily_minutes,
+    frequency_per_week,
+    duration_minutes,
+    priority_score,
+    title
+  } = req.body
+
+  const userInfo = await getUserFromToken(req)
+  if (!userInfo?.sub) return res.status(401).json({ error: 'Unauthorized' })
+
+  // Get the access token for calendar
+  const authHeader = req.headers.authorization
+  const accessToken = authHeader.split(' ')[1]
+
+  try {
+    // Update task in Supabase
+    const updateData= {
+      priority_score,
+      updated_at: new Date().toISOString()
+    }
+
+    if (event_time) updateData.event_time = event_time
+    if (daily_minutes) updateData.daily_minutes = daily_minutes
+    if (frequency_per_week) updateData.frequency_per_week = frequency_per_week
+    if (duration_minutes) updateData.duration_minutes = duration_minutes
+
+    // Create calendar event
+    let calendarEvent = null
+    if (event_time && end_time) {
+      try {
+        calendarEvent = await createCalendarEvent(accessToken, {
+          title,
+          start: event_time,
+          end: end_time,
+          description: `Scheduled by Productivity Companion`
+        })
+        updateData.calendar_event_id = calendarEvent.id
+        updateData.status = 'in-progress'
+      } catch (calErr) {
+        console.error('Calendar error:', calErr)
+        // Don't fail the whole request if calendar fails
+      }
+    }
+
+    // Update Supabase
+    const { error: dbError } = await supabase
+      .from('tasks')
+      .update(updateData)
+      .eq('id', task_id)
+      .eq('google_id', userInfo.sub)
+
+    if (dbError) {
+      console.error('Supabase update error:', dbError)
+      return res.status(500).json({ error: dbError.message })
+    }
+
+    res.json({ 
+      success: true, 
+      calendar_event_id: calendarEvent?.id ?? null,
+      calendar_link: calendarEvent?.htmlLink ?? null
+    })
+
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

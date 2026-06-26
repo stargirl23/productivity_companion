@@ -97,7 +97,7 @@ const handleSchedule = async () => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${userToken}`
       },
-      body: JSON.stringify({ task, targetDate }),
+      body: JSON.stringify({ task, targetDate, workUrl }),
     });
     const data: Classification = await res.json();
     setClassification(data);
@@ -120,7 +120,7 @@ const handleBuildPlan = async () => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${userToken}`
       },
-      body: JSON.stringify({ task, targetDate }),
+      body: JSON.stringify({ task, targetDate, workUrl }),
     });
     const data = await res.json();
     setBattlePlan(data.battlePlan);
@@ -335,7 +335,16 @@ const handleBuildPlan = async () => {
           />
 
           {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
-
+<label className={cn('block text-xs font-medium mt-3 mb-1', subtext)}>
+  Work resource URL <span className={cn('font-normal', subtext)}>(optional)</span>
+</label>
+<input
+  type="url"
+  placeholder="e.g. https://leetcode.com/problems/..."
+  value={workUrl}
+  onChange={e => setWorkUrl(e.target.value)}
+  className={cn('w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors', inputCn)}
+/>
           {/* Two CTAs */}
           <div className="flex gap-2 mt-3">
             {/* Primary: Schedule It */}
