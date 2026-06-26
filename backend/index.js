@@ -273,7 +273,139 @@ async function createCalendarEvent(accessToken, eventDetails) {
   
   return response.data
 }
+app.post('/find-slots', async (req, res) => {
+  const { task_id, task, duration_minutes, daily_minutes, execution_type, target_date } = req.body
+  
+  const userInfo = await getUserFromToken(req)
+  if (!userInfo?.sub) return res.status(401).json({ error: 'Unauthorized' })
+  
+  const authHeader = req.headers.authorization
+  const accessToken = authHeader.split(' ')[1]
+  
+  try {
+    // 1. Fetch user availability windows from Supabase
+    const { data: prefs } = await supabase
+      .from('user_preferences')
+      .select('availability_windows')
+      .eq('google_id', userInfo.sub)
+      .single()
+    
+    const availabilityWindows = prefs?.availability_windows ?? [
+      { start: '06:00', end: '22:00' }
+    ]
+    
+    // 2. Fetch free/busy from Google Calendar
+    const auth = new google.auth.OAuth2()
+    auth.setCredentials({ access_token: accessToken })
+    const calendar = google.calendar({ version: 'v3', auth })
+    
+    const now = new Date()
+    const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+    
+    const freeBusyRes = await calendar.freebusy.query({
+      requestBody: {
+        timeMin: now.toISOString(),
+        timeMax: sevenDaysLater.toISOString(),
+        items: [{ id: 'primary' }]
+      }
+    })
+    
+    const busySlots = freeBusyRes.data.calendars.primary.busy ?? []
+    
+    // 3. Generate candidate slots within availability windows
+    const sessionDuration = duration_minutes ?? daily_minutes ?? 60
+    const candidateSlots = []
+    
+    for (let day = 0; day < 7; day++) {
+      const date = new Date(now)
+      date.setDate(date.getDate() + day)
+      const dateStr = date.toISOString().split('T')[0]
+      
+      for (const window of availabilityWindows) {
+        const [startHour, startMin] = window.start.split(':').map(Number)
+        const [endHour, endMin] = window.end.split(':').map(Number)
+        
+        // Generate slots every 30 minutes within window
+        let slotStart = new Date(`${dateStr}T${window.start}:00`)
+        const windowEnd = new Date(`${dateStr}T${window.end}:00`)
+        
+        while (slotStart < windowEnd) {
+          const slotEnd = new Date(slotStart.getTime() + sessionDuration * 60 * 1000)
+          
+          if (slotEnd > windowEnd) break
+          if (slotStart < now) {
+            slotStart = new Date(slotStart.getTime() + 30 * 60 * 1000)
+            continue
+          }
+          
+          // Check if slot overlaps with any busy period
+          const isConflict = busySlots.some(busy => {
+            const busyStart = new Date(busy.start)
+            const busyEnd = new Date(busy.end)
+            return slotStart < busyEnd && slotEnd > busyStart
+          })
+          
+          if (!isConflict) {
+            candidateSlots.push({
+              start: slotStart.toISOString(),
+              end: slotEnd.toISOString()
+            })
+          }
+          
+          slotStart = new Date(slotStart.getTime() + 30 * 60 * 1000)
+        }
+      }
+    }
+    
+    if (candidateSlots.length === 0) {
+      return res.json({ slots: [], message: 'No free slots found in your availability windows' })
+    }
+    
+    // 4. Pass top 10 candidates to Gemini for ranking
+    const topCandidates = candidateSlots.slice(0, 10)
+    
+    const prompt = `You are a scheduling assistant. Pick the best 3 slots for this task.
 
+Task: "${task}"
+Duration needed: ${sessionDuration} minutes
+Execution type: ${execution_type}
+Target date: ${target_date}
+
+Available slots:
+${topCandidates.map((s, i) => `${i + 1}. ${new Date(s.start).toLocaleString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} - ${new Date(s.end).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit' })}`).join('\n')}
+
+Rules:
+- Prefer morning slots for focus-heavy tasks (coding, studying, writing)
+- Prefer slots not immediately after long gaps (consistency)
+- For continuous tasks, prefer same time each day for habit building
+- Never pick slots that seem too early (before 6am) or too late (after 10pm)
+
+Respond ONLY in this exact JSON format, no extra text:
+{
+  "suggestions": [
+    { "index": 1, "reason": "Best morning focus window, no meetings nearby" },
+    { "index": 2, "reason": "Consistent with typical work pattern" },
+    { "index": 3, "reason": "Backup option, slightly later in day" }
+  ]
+}`
+
+    const raw = await callGemini(prompt)
+    const clean = raw.replace(/```json|```/g, '').trim()
+    const parsed = JSON.parse(clean)
+    
+    const recommendedSlots = parsed.suggestions.map(s => ({
+      start: topCandidates[s.index - 1].start,
+      end: topCandidates[s.index - 1].end,
+      reason: s.reason
+    }))
+    
+    res.json({ slots: recommendedSlots })
+    
+  } catch (err) {
+    console.error('/find-slots error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
 app.post('/confirm-task', async (req, res) => {
   const {
     task_id,

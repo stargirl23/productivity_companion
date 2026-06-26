@@ -108,7 +108,39 @@ const handleSchedule = async () => {
     setView('intake');
   }
 };
-
+const handleFindSlots = async () => {
+  if (!classification || !taskId) return
+  setView('loading')
+  setError(null)
+  try {
+    const res = await fetch(`${BACKEND_URL}/find-slots`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userToken}`
+      },
+      body: JSON.stringify({
+        task_id: taskId,
+        task,
+        duration_minutes: classification.duration_minutes,
+        daily_minutes: classification.daily_minutes,
+        execution_type: classification.execution_type,
+        target_date: targetDate
+      })
+    })
+    const data = await res.json()
+    if (data.slots?.length > 0) {
+      setSlots(data.slots)
+      setView('slots')
+    } else {
+      setError('No free slots found. Try adjusting your availability windows.')
+      setView(classification.execution_type)
+    }
+  } catch {
+    setError('Failed to find slots. Try again.')
+    setView(classification.execution_type)
+  }
+}
 const handleBuildPlan = async () => {
   if (!task.trim() || !targetDate) return;
   setView('loading');
@@ -408,9 +440,39 @@ const handleBuildPlan = async () => {
   <option value={4}>4 — Low</option>
   <option value={5}>5 — Backburner</option>
 </select>
-          <button className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
-            Confirm & Add to Calendar
-          </button>
+         <button
+  onClick={async () => {
+    if (!taskId || !classification) return
+    setView('loading')
+    try {
+      const startTime = classification.event_time ?? targetDate
+      const endTime = new Date(new Date(startTime).getTime() + 60 * 60 * 1000).toISOString()
+      
+      const res = await fetch(`${BACKEND_URL}/confirm-task`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${userToken}`
+        },
+        body: JSON.stringify({
+          task_id: taskId,
+          title: task,
+          event_time: startTime,
+          end_time: endTime,
+          priority_score: classification.priority_score
+        })
+      })
+      const data = await res.json()
+      if (data.success) setView('confirmed')
+      else setError('Failed to confirm.')
+    } catch {
+      setError('Failed to confirm.')
+      setView('explicit')
+    }
+  }}
+  className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
+  Confirm & Add to Calendar
+</button>
           <BackButton />
         </div>
       )}
@@ -436,9 +498,11 @@ const handleBuildPlan = async () => {
   <option value={4}>4 — Low</option>
   <option value={5}>5 — Backburner</option>
 </select>
-          <button className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
-            Find Free Slots →
-          </button>
+          <button 
+  onClick={handleFindSlots}
+  className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
+  Find Free Slots →
+</button>
           <BackButton />
         </div>
       )}
@@ -497,9 +561,105 @@ const handleBuildPlan = async () => {
 
     <p className={cn('text-xs mt-2 italic', subtext)}>{classification.priority_reason}</p>
 
-    <button className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
-      Find Recurring Slots →
+   <button 
+  onClick={handleFindSlots}
+  className="mt-3 w-full rounded-lg py-2 text-sm font-bold bg-blue-500 hover:bg-blue-600 text-white transition-all">
+  Find Recurring Slots →
+</button>
+    <BackButton />
+  </div>
+)}
+{/* SLOTS VIEW */}
+{view === 'slots' && slots.length > 0 && (
+  <div className={cn('rounded-xl p-3', card)}>
+    <p className={cn('text-xs font-semibold mb-3', subtext)}>📅 Best slots for you</p>
+    <p className={cn('text-sm font-bold mb-3', text)}>{task}</p>
+    
+    {slots.map((slot, i) => (
+      <button
+        key={i}
+        onClick={() => setSelectedSlot(slot)}
+        className={cn(
+          'w-full text-left rounded-lg p-3 mb-2 border transition-all',
+          selectedSlot?.start === slot.start
+            ? 'border-blue-500 bg-blue-50'
+            : isLight
+              ? 'border-gray-200 hover:border-blue-300 bg-white'
+              : 'border-gray-700 hover:border-blue-500 bg-gray-800'
+        )}>
+        <p className={cn('text-xs font-bold', text)}>
+          {new Date(slot.start).toLocaleString('en-IN', { 
+            weekday: 'short', month: 'short', day: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+          })}
+          {' → '}
+          {new Date(slot.end).toLocaleString('en-IN', { 
+            hour: '2-digit', minute: '2-digit'
+          })}
+        </p>
+        <p className={cn('text-xs mt-1', subtext)}>{slot.reason}</p>
+      </button>
+    ))}
+
+    <button
+      onClick={async () => {
+        if (!selectedSlot || !taskId || !classification) return
+        setView('loading')
+        try {
+          const res = await fetch(`${BACKEND_URL}/confirm-task`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${userToken}`
+            },
+            body: JSON.stringify({
+              task_id: taskId,
+              title: task,
+              event_time: selectedSlot.start,
+              end_time: selectedSlot.end,
+              daily_minutes: classification.daily_minutes,
+              frequency_per_week: classification.frequency_per_week,
+              duration_minutes: classification.duration_minutes,
+              priority_score: classification.priority_score
+            })
+          })
+          const data = await res.json()
+          if (data.success) setView('confirmed')
+          else setError('Failed to confirm. Try again.')
+        } catch {
+          setError('Failed to confirm. Try again.')
+          setView('slots')
+        }
+      }}
+      disabled={!selectedSlot}
+      className={cn(
+        'mt-2 w-full rounded-lg py-2 text-sm font-bold transition-all',
+        selectedSlot
+          ? 'bg-blue-500 hover:bg-blue-600 text-white'
+          : 'bg-gray-300 text-gray-400 cursor-not-allowed'
+      )}>
+      Confirm this slot →
     </button>
+    <BackButton />
+  </div>
+)}
+
+{/* CONFIRMED VIEW */}
+{view === 'confirmed' && (
+  <div className={cn('rounded-xl p-4 text-center', card)}>
+    <div className="text-2xl mb-2">✅</div>
+    <p className={cn('text-sm font-bold', text)}>Scheduled!</p>
+    {selectedSlot && (
+      <p className={cn('text-xs mt-2', subtext)}>
+        {new Date(selectedSlot.start).toLocaleString('en-IN', {
+          weekday: 'long', month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        })}
+      </p>
+    )}
+    <p className={cn('text-xs mt-1', subtext)}>
+      Added to your Google Calendar
+    </p>
     <BackButton />
   </div>
 )}
