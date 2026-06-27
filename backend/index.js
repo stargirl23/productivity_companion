@@ -104,7 +104,6 @@ Task: "${task}"
 Target Date: "${targetDate}"
 Today: "${today}"
 Days available: ${daysUntilDeadline}
-
 First, silently classify this task as one of:
 - "project": Has multiple distinct phases (research, build, review)
 - "learning": Requires building a skill over time
@@ -407,6 +406,7 @@ Respond ONLY in this exact JSON format, no extra text:
   }
 })
 app.post('/confirm-task', async (req, res) => {
+   console.log('confirm-task body:', JSON.stringify(req.body))
   const {
     task_id,
     event_time,
