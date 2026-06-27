@@ -109,7 +109,11 @@ const handleSchedule = async () => {
   }
 };
 const handleFindSlots = async () => {
-  if (!classification || !taskId) return
+  console.log('findSlots called:', { taskId, classification, task, targetDate })
+  if (!classification || !taskId){
+     console.log('missing:', { classification: !!classification, taskId })
+    return
+  }
   setView('loading')
   setError(null)
   try {
@@ -431,7 +435,7 @@ const handleBuildPlan = async () => {
           <PriorityBadge />
           <select
   value={classification.priority_score}
-  onChange={e => setClassification({ ...classification, priority_score: Number(e.target.value) })}
+  onChange={e => setClassification({ ...classification, priority_score: Number(e.target.value),daily_minutes: Number(e.target.value) })}
   className={cn('mt-3 w-full rounded px-2 py-1 text-xs outline-none', inputCn)}
 >
   <option value={1}>1 — Critical</option>
