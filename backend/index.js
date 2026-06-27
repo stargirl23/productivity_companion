@@ -414,6 +414,7 @@ app.post('/confirm-task', async (req, res) => {
     daily_minutes,
     frequency_per_week,
     duration_minutes,
+    execution_type,
     priority_score,
     title
   } = req.body
@@ -439,17 +440,75 @@ app.post('/confirm-task', async (req, res) => {
 
     // Create calendar event
     let calendarEvent = null
-    if (event_time && end_time) {
-      try {
-        calendarEvent = await createCalendarEvent(accessToken, {
-          title,
-          start: event_time,
-          end: end_time,
-          description: `Scheduled by Productivity Companion`
-        })
-        updateData.calendar_event_id = calendarEvent.id
-        updateData.status = 'in-progress'
-      } catch (calErr) {
+    if (execution_type === 'continuous' && frequency_per_week) {
+  async function createRecurringCalendarEvent(accessToken, eventDetails) {
+  const auth = new google.auth.OAuth2()
+  auth.setCredentials({ access_token: accessToken })
+  const calendar = google.calendar({ version: 'v3', auth })
+
+  // Build RRULE based on frequency_per_week
+  // We pick days spread evenly through the week
+  const daysByFrequency = {
+    1: ['MO'],
+    2: ['MO', 'TH'],
+    3: ['MO', 'WE', 'FR'],
+    4: ['MO', 'TU', 'TH', 'FR'],
+    5: ['MO', 'TU', 'WE', 'TH', 'FR'],
+    6: ['MO', 'TU', 'WE', 'TH', 'FR', 'SA'],
+    7: ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
+  }
+
+  const days = daysByFrequency[eventDetails.frequency_per_week] ?? ['MO', 'WE', 'FR']
+  const until = new Date(eventDetails.target_date)
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .split('.')[0] + 'Z'
+
+  const event = {
+    summary: eventDetails.title,
+    description: 'Recurring session scheduled by Productivity Companion',
+    start: {
+      dateTime: eventDetails.start,
+      timeZone: 'Asia/Kolkata'
+    },
+    end: {
+      dateTime: eventDetails.end,
+      timeZone: 'Asia/Kolkata'
+    },
+    recurrence: [
+      `RRULE:FREQ=WEEKLY;BYDAY=${days.join(',')};UNTIL=${until}`
+    ],
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'popup', minutes: 15 }
+      ]
+    }
+  }
+
+  const response = await calendar.events.insert({
+    calendarId: 'primary',
+    resource: event
+  })
+
+  return response.data
+}
+  calendarEvent = await createRecurringCalendarEvent(accessToken, {
+    title,
+    start: event_time,
+    end: end_time,
+    target_date,
+    frequency_per_week
+  })
+} else {
+  try{// Create single event (explicit or one-off)
+  calendarEvent = await createCalendarEvent(accessToken, {
+    title,
+    start: event_time,
+    end: end_time,
+    description: `Scheduled by Productivity Companion`
+  })
+} catch (calErr) {
         console.error('Calendar error:', calErr)
         // Don't fail the whole request if calendar fails
       }

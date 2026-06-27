@@ -620,7 +620,9 @@ const handleBuildPlan = async () => {
               daily_minutes: classification.daily_minutes,
               frequency_per_week: classification.frequency_per_week,
               duration_minutes: classification.duration_minutes,
-              priority_score: classification.priority_score
+              priority_score: classification.priority_score,
+               execution_type: classification.execution_type,  // ADD THIS
+              target_date: targetDate  
             })
           })
           const data = await res.json()
