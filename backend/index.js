@@ -485,6 +485,7 @@ app.post('/confirm-task', async (req, res) => {
     }
 
     if (event_time) updateData.event_time = event_time
+    if (end_time) updateData.end_time = end_time  
     if (daily_minutes) updateData.daily_minutes = daily_minutes
     if (frequency_per_week) updateData.frequency_per_week = frequency_per_week
     if (duration_minutes) updateData.duration_minutes = duration_minutes
