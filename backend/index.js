@@ -467,6 +467,7 @@ app.post('/confirm-task', async (req, res) => {
     duration_minutes,
     execution_type,
     priority_score,
+    target_date, 
     title
   } = req.body
 
@@ -492,29 +493,27 @@ app.post('/confirm-task', async (req, res) => {
 
     // Create calendar event
     let calendarEvent = null
+if (event_time && end_time) {
+  try {
     if (execution_type === 'continuous' && frequency_per_week) {
-
-  calendarEvent = await createRecurringCalendarEvent(accessToken, {
-    title,
-    start: event_time,
-    end: end_time,
-    target_date,
-    frequency_per_week
-  })
-} else {
-  try{// Create single event (explicit or one-off)
-  calendarEvent = await createCalendarEvent(accessToken, {
-    title,
-    start: event_time,
-    end: end_time,
-    description: `Scheduled by Productivity Companion`
-  })
-} catch (calErr) {
-        console.error('Calendar error:', calErr)
-        // Don't fail the whole request if calendar fails
-      }
+      calendarEvent = await createRecurringCalendarEvent(accessToken, {
+        title, start: event_time, end: end_time,
+        target_date, frequency_per_week
+      })
+    } else {
+      calendarEvent = await createCalendarEvent(accessToken, {
+        title, start: event_time, end: end_time,
+        description: 'Scheduled by Productivity Companion'
+      })
     }
-
+    console.log('calendar event created:', calendarEvent?.id)
+    updateData.calendar_event_id = calendarEvent.id
+    updateData.status = 'in-progress'
+  } catch (calErr) {
+    console.error('Calendar error message:', calErr.message)
+    console.error('Calendar error details:', JSON.stringify(calErr.response?.data ?? {}))
+  }
+}
     // Update Supabase
     const { error: dbError } = await supabase
       .from('tasks')
