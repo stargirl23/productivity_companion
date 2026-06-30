@@ -1,6 +1,6 @@
 # Productivity Companion
 
-An AI-powered Chrome extension that helps users plan, prioritize, and actually complete tasks before deadlines are missed. Built for Vibe2Ship.
+An AI-powered Chrome extension that helps users plan, prioritize, and actually complete tasks before deadlines are missed.
 
 ## Problem
 
